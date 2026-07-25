@@ -4,7 +4,41 @@ import apiClient from "../api/client";
 import * as filesApi from "../api/files";
 import * as keysApi from "../api/keys";
 import { useAuth } from "../hooks/useAuth";
+import { getServerBaseUrl, copyToClipboard, formatConnectionInfo } from "../api/share";
 import type { FileItem } from "../types";
+
+// ========== 分享连接按钮 ==========
+
+function ShareFileButton() {
+  const [copied, setCopied] = useState(false);
+
+  const handleClick = async () => {
+    const autoKey = localStorage.getItem("api_key_auto");
+    if (!autoKey) return;
+    const text = formatConnectionInfo(getServerBaseUrl(), autoKey);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const autoKey = localStorage.getItem("api_key_auto");
+  if (!autoKey) return null;
+
+  return (
+    <button
+      onClick={handleClick}
+      className={`ml-2 rounded px-2 py-1 text-xs transition-colors ${
+        copied
+          ? "bg-green-100 text-green-700"
+          : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+      }`}
+    >
+      {copied ? "已复制 ✓" : "复制连接"}
+    </button>
+  );
+}
 
 // ========== API Key 配置页 ==========
 
@@ -369,6 +403,7 @@ export default function FileBrowserPage() {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-gray-900">文件浏览</h1>
+          <ShareFileButton />
           {!isWebUser && (
             <button
               onClick={() => {

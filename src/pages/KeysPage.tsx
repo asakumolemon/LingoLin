@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import Loading from "../components/Loading";
 import * as keysApi from "../api/keys";
 import type { ApiKey, KeyPermission } from "../types";
+import { getServerBaseUrl, copyToClipboard, formatConnectionInfo } from "../api/share";
 
 // ========== 新建密钥弹窗 ==========
 
@@ -54,6 +55,18 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
 
   // 如果创建成功，显示密钥明文（只显示一次）
   if (newKey) {
+    const baseUrl = getServerBaseUrl();
+    const connText = formatConnectionInfo(baseUrl, newKey.key || "");
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+      const ok = await copyToClipboard(connText);
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    };
+
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
         <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
@@ -66,12 +79,28 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
             <label className="mb-1 block text-sm font-medium text-gray-700">密钥</label>
             <code className="block break-all rounded bg-gray-100 px-3 py-2 text-sm">{newKey.key}</code>
           </div>
-          <button
-            onClick={handleClose}
-            className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            我已保存，关闭
-          </button>
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-gray-700">连接信息（分享给其他端使用）</label>
+            <pre className="whitespace-pre-wrap rounded bg-gray-50 px-3 py-2 text-xs text-gray-700">{connText}</pre>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCopy}
+              className={`flex-1 rounded px-4 py-2 text-sm font-medium transition-colors ${
+                copied
+                  ? "bg-green-600 text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {copied ? "已复制 ✓" : "复制连接信息"}
+            </button>
+            <button
+              onClick={handleClose}
+              className="rounded border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              关闭
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -255,6 +284,34 @@ function EditDialog({ open, keyItem, onClose, onUpdated }: EditDialogProps) {
   );
 }
 
+// ========== 分享按钮（仅对已知明文密钥可用） ==========
+
+function ShareButton({ keyName }: { keyName: string }) {
+  const [copied, setCopied] = useState(false);
+  const autoKey = localStorage.getItem("api_key_auto");
+
+  if (keyName !== "Web 管理端自动生成" || !autoKey) {
+    return null;
+  }
+
+  const baseUrl = getServerBaseUrl();
+  const connText = formatConnectionInfo(baseUrl, autoKey);
+
+  const handleClick = async () => {
+    const ok = await copyToClipboard(connText);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <button onClick={handleClick} className={`text-sm transition-colors ${copied ? "text-green-600" : "text-indigo-600 hover:text-indigo-800"}`}>
+      {copied ? "已复制 ✓" : "分享"}
+    </button>
+  );
+}
+
 // ========== 主页面 ==========
 
 export default function KeysPage() {
@@ -365,6 +422,7 @@ export default function KeysPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
+                      <ShareButton keyName={key.name} />
                       <button
                         onClick={() => setEditTarget(key)}
                         className="text-blue-600 hover:text-blue-800"
