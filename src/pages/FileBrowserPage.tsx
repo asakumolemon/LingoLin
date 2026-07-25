@@ -163,6 +163,7 @@ export default function FileBrowserPage() {
 
   const [configured, setConfigured] = useState(false);
   const [initError, setInitError] = useState("");
+  const configuringRef = useRef(false);
   const [currentPath, setCurrentPath] = useState("/");
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,19 +179,23 @@ export default function FileBrowserPage() {
 
   // 自动为 Web 登录用户配置代理 + API Key
   const autoConfigure = useCallback(async (retried?: boolean) => {
+    // 防止 StrictMode / 竞态下重复创建
+    if (configuringRef.current) return;
+    configuringRef.current = true;
+
     apiClient.setBaseUrl("");
     const savedKey = localStorage.getItem("api_key_auto");
     if (savedKey) {
       apiClient.setApiKey(savedKey);
-      // 先尝试用已有 key 请求一次，失败则重新创建
       try {
         await filesApi.listFiles("/");
         setConfigured(true);
+        configuringRef.current = false;
         return;
       } catch {
-        // key 失效（被删除等），清除后重新创建
         localStorage.removeItem("api_key_auto");
         if (!retried) {
+          configuringRef.current = false;
           autoConfigure(true);
         }
         return;
@@ -210,6 +215,8 @@ export default function FileBrowserPage() {
       }
     } catch (err) {
       setInitError(err instanceof Error ? err.message : "自动配置失败");
+    } finally {
+      configuringRef.current = false;
     }
   }, []);
 
