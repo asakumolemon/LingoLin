@@ -209,6 +209,10 @@ export default function FileBrowserPage() {
   const [deleteTarget, setDeleteTarget] = useState<FileItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadCount, setUploadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<"name" | "size" | "updated_at">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 自动为 Web 登录用户配置代理 + API Key
@@ -300,28 +304,54 @@ export default function FileBrowserPage() {
     })),
   ];
 
-  // 排序：目录在前，文件在后，按名称字母排序
-  const sortedItems = [...items].sort((a, b) => {
-    if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  // 上传文件
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      // 目标路径 = 当前目录 + 文件名
-      const targetPath = currentPath === "/" ? "/" + file.name : currentPath + "/" + file.name;
-      await filesApi.uploadFile(file, targetPath);
-      fetchFiles(currentPath);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "上传失败");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+  // 排序：目录在前，文件在后，按字段排序
+  const toggleSort = (field: "name" | "size" | "updated_at") => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir(field === "name" ? "asc" : "desc");
     }
+  };
+
+  const sortedItems = [...items]
+    .filter((item) =>
+      searchQuery ? item.name.toLowerCase().includes(searchQuery.toLowerCase()) : true
+    )
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+      let cmp = 0;
+      if (sortField === "name") cmp = a.name.localeCompare(b.name);
+      else if (sortField === "size") cmp = a.size - b.size;
+      else cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+  const SortIcon = ({ field }: { field: typeof sortField }) => {
+    if (sortField !== field) return <span className="ml-1 text-gray-300">↕</span>;
+    return <span className="ml-1 text-blue-500">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  // 上传文件（支持多文件）
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setUploadCount(0);
+    let success = 0;
+    for (const file of files) {
+      try {
+        const targetPath = currentPath === "/" ? "/" + file.name : currentPath + "/" + file.name;
+        await filesApi.uploadFile(file, targetPath);
+        success++;
+      } catch {
+        // 单个文件失败继续上传其他
+      }
+      setUploadCount(success);
+    }
+    fetchFiles(currentPath);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // 下载文件
@@ -430,11 +460,12 @@ export default function FileBrowserPage() {
             disabled={uploading}
             className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {uploading ? "上传中..." : "上传文件"}
+            {uploading ? `上传中 (${uploadCount})...` : "上传文件"}
           </button>
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="hidden"
             onChange={handleUpload}
           />
@@ -447,24 +478,33 @@ export default function FileBrowserPage() {
         </div>
       </div>
 
-      {/* 面包屑导航 */}
-      <nav className="mb-4 flex items-center gap-1 text-sm">
-        {breadcrumbs.map((crumb, i) => (
-          <span key={crumb.path} className="flex items-center gap-1">
-            {i > 0 && <span className="text-gray-300">/</span>}
-            {i === breadcrumbs.length - 1 ? (
-              <span className="font-medium text-gray-900">{crumb.label}</span>
-            ) : (
-              <button
-                onClick={() => navigateTo(crumb.path)}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                {crumb.label}
-              </button>
-            )}
-          </span>
-        ))}
-      </nav>
+      {/* 面包屑导航 + 搜索 */}
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <nav className="flex items-center gap-1 text-sm">
+          {breadcrumbs.map((crumb, i) => (
+            <span key={crumb.path} className="flex items-center gap-1">
+              {i > 0 && <span className="text-gray-300">/</span>}
+              {i === breadcrumbs.length - 1 ? (
+                <span className="font-medium text-gray-900">{crumb.label}</span>
+              ) : (
+                <button
+                  onClick={() => navigateTo(crumb.path)}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  {crumb.label}
+                </button>
+              )}
+            </span>
+          ))}
+        </nav>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索文件..."
+          className="w-56 rounded-lg border border-gray-200 px-3 py-1.5 text-sm placeholder-gray-400 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        />
+      </div>
 
       {/* 错误提示 */}
       {error && (
@@ -484,10 +524,22 @@ export default function FileBrowserPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="px-4 py-3">名称</th>
-                <th className="px-4 py-3">大小</th>
+                <th className="px-4 py-3">
+                  <button onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-gray-700">
+                    名称<SortIcon field="name" />
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button onClick={() => toggleSort("size")} className="flex items-center gap-1 hover:text-gray-700">
+                    大小<SortIcon field="size" />
+                  </button>
+                </th>
                 <th className="px-4 py-3">类型</th>
-                <th className="px-4 py-3">修改时间</th>
+                <th className="px-4 py-3">
+                  <button onClick={() => toggleSort("updated_at")} className="flex items-center gap-1 hover:text-gray-700">
+                    修改时间<SortIcon field="updated_at" />
+                  </button>
+                </th>
                 <th className="px-4 py-3">操作</th>
               </tr>
             </thead>
@@ -497,11 +549,17 @@ export default function FileBrowserPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => item.type === "dir" ? navigateTo(item.path) : setPreviewItem(item)}
-                      className="flex items-center gap-2 text-left"
+                      className="flex items-center gap-2.5 text-left"
                     >
-                      <span className="text-base">
-                        {item.type === "dir" ? "📁" : "📄"}
-                      </span>
+                      {item.type === "dir" ? (
+                        <svg className="h-5 w-5 shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                      )}
                       <span className="font-medium text-gray-900 hover:text-blue-600">
                         {item.name}
                       </span>
