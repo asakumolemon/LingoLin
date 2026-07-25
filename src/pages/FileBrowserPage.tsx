@@ -176,14 +176,25 @@ export default function FileBrowserPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 自动为 Web 登录用户创建/获取 API Key
-  const autoConfigure = useCallback(async () => {
-    apiClient.setBaseUrl(""); // 走 Vite 代理
+  // 自动为 Web 登录用户配置代理 + API Key
+  const autoConfigure = useCallback(async (retried?: boolean) => {
+    apiClient.setBaseUrl("");
     const savedKey = localStorage.getItem("api_key_auto");
     if (savedKey) {
       apiClient.setApiKey(savedKey);
-      setConfigured(true);
-      return;
+      // 先尝试用已有 key 请求一次，失败则重新创建
+      try {
+        await filesApi.listFiles("/");
+        setConfigured(true);
+        return;
+      } catch {
+        // key 失效（被删除等），清除后重新创建
+        localStorage.removeItem("api_key_auto");
+        if (!retried) {
+          autoConfigure(true);
+        }
+        return;
+      }
     }
     try {
       const newKey = await keysApi.createKey({
@@ -202,22 +213,14 @@ export default function FileBrowserPage() {
     }
   }, []);
 
-  // 初始化：Web 用户自动配置，非 Web 用户检查已有配置
+  // 初始化：isWebUser 变化时（包括 auth 恢复后）触发配置
   useEffect(() => {
     if (isWebUser) {
-      const saved = localStorage.getItem("api_key_auto");
-      if (saved) {
-        apiClient.setBaseUrl("");
-        apiClient.setApiKey(saved);
-        setConfigured(true);
-      } else {
-        autoConfigure();
-      }
+      autoConfigure();
     } else {
       setConfigured(!!apiClient.getBaseUrl() && !!apiClient.getApiKey());
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isWebUser, autoConfigure]);
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
