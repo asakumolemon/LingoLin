@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { isTauri } from "../hooks/useEnv";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -8,6 +9,9 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
   const location = useLocation();
+
+  // Tauri 模式不需要 JWT 登录，直接放行到文件浏览页
+  if (isTauri()) return <>{children}</>;
 
   if (loading) {
     return (

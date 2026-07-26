@@ -91,7 +91,18 @@ async function request<T>(url: string, options: RequestOptions = {}): Promise<T>
     return res as unknown as T;
   }
 
-  const json: ApiResponse<T> = await res.json();
+  // 安全解析 JSON，防止空响应报错
+  const text = await res.text();
+  if (!text) {
+    throw new Error(`服务器返回空响应 (${res.status})`);
+  }
+
+  let json: ApiResponse<T>;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`服务器返回格式错误: ${text.slice(0, 200)}`);
+  }
 
   if (json.code !== 0) {
     throw new Error(json.message || "未知错误");
