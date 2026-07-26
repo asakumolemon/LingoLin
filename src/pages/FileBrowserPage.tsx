@@ -146,17 +146,32 @@ export default function FileBrowserPage() {
 
   // Web 已登录用户：自动创建 API Key（无需手动配置）
   const [webInitDone, setWebInitDone] = useState(false);
+  const [webInitError, setWebInitError] = useState("");
   useEffect(() => {
     if (!isWebUser || webInitDone) return;
     if (configured) { setWebInitDone(true); return; }
 
-    const init = async () => {
+    const init = async (retried?: boolean) => {
       apiClient.setBaseUrl("");
       const saved = localStorage.getItem("api_key_auto");
       if (saved) {
         apiClient.setApiKey(saved);
-        setWebInitDone(true);
-        return;
+        // 验证已有 key 是否有效
+        try {
+          await filesApi.listFiles("/");
+          setWebInitDone(true);
+          return;
+        } catch {
+          // key 失效，清除后重新创建
+          localStorage.removeItem("api_key_auto");
+          if (!retried) {
+            init(true);
+          } else {
+            setWebInitError("API Key 已失效，请在密钥管理页重新创建");
+            setWebInitDone(true);
+          }
+          return;
+        }
       }
       try {
         const newKey = await keysApi.createKey({
@@ -166,9 +181,11 @@ export default function FileBrowserPage() {
         if (newKey.key) {
           localStorage.setItem("api_key_auto", newKey.key);
           apiClient.setApiKey(newKey.key);
+        } else {
+          setWebInitError("自动创建 API Key 失败");
         }
       } catch {
-        // 创建失败，后续操作会报错
+        setWebInitError("自动创建 API Key 失败");
       }
       setWebInitDone(true);
     };
@@ -424,6 +441,11 @@ export default function FileBrowserPage() {
           className="w-56 rounded-lg border border-gray-200 px-3 py-1.5 text-sm placeholder-gray-400 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         />
       </div>
+
+      {/* 初始化错误 */}
+      {webInitError && (
+        <div className="mb-4 rounded bg-red-50 px-4 py-3 text-sm text-red-600">{webInitError}</div>
+      )}
 
       {/* 错误提示 */}
       {error && (
