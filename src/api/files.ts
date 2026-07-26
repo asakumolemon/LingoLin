@@ -3,9 +3,7 @@ import type { ListResp, MkdirReq, MkdirResp, UploadResp } from "../types";
 
 /** 获取文件列表 */
 export function listFiles(path: string) {
-  return apiClient.request<ListResp>(`/api/files/list?path=${encodeURIComponent(path)}`, {
-    useApiKey: true,
-  });
+  return apiClient.request<ListResp>(`/api/files/list?path=${encodeURIComponent(path)}`);
 }
 
 /** 上传文件 */
@@ -16,7 +14,6 @@ export function uploadFile(file: File, path: string) {
   return apiClient.request<UploadResp>("/api/files/upload", {
     method: "POST",
     formData,
-    useApiKey: true,
   });
 }
 
@@ -49,7 +46,6 @@ export function mkdir(req: MkdirReq) {
   return apiClient.request<MkdirResp>("/api/files/mkdir", {
     method: "POST",
     body: req,
-    useApiKey: true,
   });
 }
 
@@ -57,6 +53,6 @@ export function mkdir(req: MkdirReq) {
 export function removeFile(path: string) {
   return apiClient.request<void>(
     `/api/files/remove?path=${encodeURIComponent(path)}`,
-    { method: "DELETE", useApiKey: true }
+    { method: "DELETE" }
   );
 }

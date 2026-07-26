@@ -6,10 +6,3 @@ export function isTauri(): boolean {
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined
   );
 }
-
-/** 获取环境类型 */
-export type EnvType = "tauri" | "web";
-
-export function getEnv(): EnvType {
-  return isTauri() ? "tauri" : "web";
-}
