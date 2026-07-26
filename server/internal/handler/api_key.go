@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
-	"LingoLin-go/internal/model"
 	"LingoLin-go/internal/service"
 	"net/http"
 	"strconv"
@@ -16,12 +14,6 @@ type ApiKeyHandler struct {
 
 func NewApiKeyHandler(svc *service.ApiKeyService) *ApiKeyHandler {
 	return &ApiKeyHandler{svc: svc}
-}
-
-type updateKeyReq struct {
-	Name        string                `json:"name"`
-	Permissions *model.KeyPermission  `json:"permissions"`
-	IsActive    *bool                 `json:"is_active"`
 }
 
 func (h *ApiKeyHandler) List(c *gin.Context) {
@@ -77,30 +69,13 @@ func (h *ApiKeyHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req updateKeyReq
+	var req service.UpdateKeyReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Error(c, http.StatusBadRequest, CodeBadRequest, "参数错误: "+err.Error())
 		return
 	}
 
-	updates := make(map[string]interface{})
-	if req.Name != "" {
-		updates["name"] = req.Name
-	}
-	if req.Permissions != nil {
-		data, _ := json.Marshal(req.Permissions)
-		updates["permissions"] = string(data)
-	}
-	if req.IsActive != nil {
-		updates["is_active"] = *req.IsActive
-	}
-
-	if len(updates) == 0 {
-		Error(c, http.StatusBadRequest, CodeBadRequest, "没有需要更新的字段")
-		return
-	}
-
-	if err := h.svc.Update(uint(id), userID, updates); err != nil {
+	if err := h.svc.Update(uint(id), userID, &req); err != nil {
 		Error(c, http.StatusNotFound, CodeNotFound, err.Error())
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -26,6 +27,13 @@ type CreateKeyReq struct {
 	Name        string               `json:"name" binding:"required,max=64"`
 	Permissions model.KeyPermission  `json:"permissions"`
 	ExpiresAt   *time.Time           `json:"expires_at,omitempty"`
+}
+
+// UpdateKeyReq 密钥更新请求（只更新非零字段）
+type UpdateKeyReq struct {
+	Name        string               `json:"name"`
+	Permissions *model.KeyPermission `json:"permissions"`
+	IsActive    *bool                `json:"is_active"`
 }
 
 type KeyResp struct {
@@ -102,7 +110,27 @@ func (s *ApiKeyService) Delete(id uint, userID uint) error {
 	return nil
 }
 
-func (s *ApiKeyService) Update(id uint, userID uint, updates map[string]interface{}) error {
+func (s *ApiKeyService) Update(id uint, userID uint, req *UpdateKeyReq) error {
+	// 构建更新 map（统一在 service 层处理序列化）
+	updates := make(map[string]interface{})
+	if req.Name != "" {
+		updates["name"] = req.Name
+	}
+	if req.Permissions != nil {
+		data, err := json.Marshal(req.Permissions)
+		if err != nil {
+			return errors.New("权限格式错误")
+		}
+		updates["permissions"] = string(data)
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+
+	if len(updates) == 0 {
+		return errors.New("没有需要更新的字段")
+	}
+
 	if err := s.keyRepo.Update(id, updates); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("密钥不存在")

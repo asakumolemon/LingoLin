@@ -44,7 +44,7 @@ func main() {
 	// 初始化业务逻辑层
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	apiKeySvc := service.NewApiKeyService(apiKeyRepo)
-	fileSvc := service.NewFileService(cfg.StorePath, fileRecordRepo)
+	fileSvc := service.NewFileService(cfg.StorePath, fileRecordRepo, cfg.MaxUploadSize)
 
 	// 确保默认管理员账号存在
 	authSvc.EnsureDefaultAdmin(cfg.DefaultAdminPassword)
@@ -67,6 +67,9 @@ func main() {
 	}))
 
 	// ========== 公开路由 ==========
+	r.GET("/api/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
 	r.POST("/api/auth/register", authHandler.Register)
 	r.POST("/api/auth/login", authHandler.Login)
 

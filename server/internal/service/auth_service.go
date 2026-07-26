@@ -147,24 +147,10 @@ func HashPassword(password string) (string, error) {
 	return string(hashed), nil
 }
 
-// EnsureDefaultAdmin 检测无用户时自动创建默认管理员
+// EnsureDefaultAdmin 检测无用户时自动创建默认管理员（使用 FirstOrCreate 防竞态）
 func (s *AuthService) EnsureDefaultAdmin(password string) {
-	count, err := s.userRepo.Count()
-	if err != nil {
-		log.Printf("[警告] 检查用户数量失败: %v", err)
-		return
-	}
-	if count > 0 {
-		return
-	}
-
-	user := &model.User{
-		Username: "admin",
-		Password: password,
-		Role:     "admin",
-	}
-	if err := s.userRepo.Create(user); err != nil {
-		log.Printf("[警告] 创建默认管理员失败: %v", err)
+	if err := s.userRepo.FirstOrCreateAdmin(password); err != nil {
+		log.Printf("[警告] 创建默认管理员失败（可能已存在）: %v", err)
 		return
 	}
 	log.Printf("已创建默认管理员账号（用户名: admin, 密码: %s），请尽快修改密码！", password)

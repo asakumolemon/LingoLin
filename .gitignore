@@ -28,3 +28,6 @@ server/store/
 .DS_Store
 Thumbs.db
 *.local
+
+# IDE / AI
+.reasonix/

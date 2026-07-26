@@ -41,3 +41,9 @@ func (r *UserRepo) Count() (int64, error) {
 	err := r.db.Model(&model.User{}).Count(&count).Error
 	return count, err
 }
+
+// FirstOrCreateAdmin 原子性创建管理员（防竞态）
+func (r *UserRepo) FirstOrCreateAdmin(password string) error {
+	user := &model.User{Username: "admin", Password: password, Role: "admin"}
+	return r.db.Where("username = ?", "admin").FirstOrCreate(user).Error
+}

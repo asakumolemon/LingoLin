@@ -1,6 +1,10 @@
 package handler
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
 
 type Response struct {
 	Code    int         `json:"code"`
@@ -9,7 +13,7 @@ type Response struct {
 }
 
 func Success(c *gin.Context, data interface{}) {
-	c.JSON(200, Response{Code: 0, Message: "success", Data: data})
+	c.JSON(http.StatusOK, Response{Code: 0, Message: "success", Data: data})
 }
 
 func Error(c *gin.Context, httpCode, code int, msg string) {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"mime"
@@ -15,12 +16,13 @@ import (
 )
 
 type FileService struct {
-	storePath  string
-	recordRepo *repository.FileRecordRepo
+	storePath     string
+	recordRepo    *repository.FileRecordRepo
+	MaxUploadSize int64
 }
 
-func NewFileService(storePath string, recordRepo *repository.FileRecordRepo) *FileService {
-	return &FileService{storePath: storePath, recordRepo: recordRepo}
+func NewFileService(storePath string, recordRepo *repository.FileRecordRepo, maxUploadSize int64) *FileService {
+	return &FileService{storePath: storePath, recordRepo: recordRepo, MaxUploadSize: maxUploadSize}
 }
 
 type FileItem struct {
@@ -198,13 +200,13 @@ func (s *FileService) Upload(apiPath string, reader io.Reader, apiKeyID uint) (*
 	// 写入文件
 	dst, err := os.Create(realPath)
 	if err != nil {
-		return nil, errors.New("无法创建文件")
+		return nil, fmt.Errorf("无法创建文件: %w", err)
 	}
 	defer dst.Close()
 
 	written, err := io.Copy(dst, reader)
 	if err != nil {
-		return nil, errors.New("写入文件失败")
+		return nil, fmt.Errorf("写入文件失败: %w", err)
 	}
 
 	name := filepath.Base(cleanPath)
@@ -251,7 +253,7 @@ func (s *FileService) Download(apiPath string) (io.ReadCloser, string, int64, er
 
 	if info.IsDir() {
 		file.Close()
-		return nil, "", 0, errors.New("不能下载目录")
+		return nil, "", 0, fmt.Errorf("不能下载目录: %s", cleanPath)
 	}
 
 	mimeType := s.detectMimeType(cleanPath)
@@ -268,7 +270,7 @@ func (s *FileService) Preview(apiPath string) (io.ReadCloser, string, int64, err
 	// 检查是否为可预览类型
 	mimeType := s.detectMimeType(cleanPath)
 	if !s.isPreviewable(mimeType) {
-		return nil, "", 0, errors.New("不支持预览该文件类型")
+		return nil, "", 0, fmt.Errorf("不支持预览该文件类型: %s", mimeType)
 	}
 
 	return s.Download(cleanPath)

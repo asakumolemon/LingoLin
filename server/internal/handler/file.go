@@ -53,6 +53,9 @@ func (h *FileHandler) List(c *gin.Context) {
 }
 
 func (h *FileHandler) Upload(c *gin.Context) {
+	// 限制上传大小
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.svc.MaxUploadSize)
+
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		Error(c, http.StatusBadRequest, CodeBadRequest, "请选择要上传的文件")
@@ -116,8 +119,11 @@ func (h *FileHandler) Download(c *gin.Context) {
 
 	c.Header("Content-Type", mimeType)
 	c.Header("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
-	c.Header("Content-Length", formatSize(size))
-	io.Copy(c.Writer, reader)
+	c.Header("Content-Length", strconv.FormatInt(size, 10))
+	if _, err := io.Copy(c.Writer, reader); err != nil {
+		// 传输中断，记录但不改变响应状态
+		_ = c.Error(err)
+	}
 }
 
 func (h *FileHandler) Preview(c *gin.Context) {
@@ -143,8 +149,10 @@ func (h *FileHandler) Preview(c *gin.Context) {
 	defer reader.Close()
 
 	c.Header("Content-Type", mimeType)
-	c.Header("Content-Length", formatSize(size))
-	io.Copy(c.Writer, reader)
+	c.Header("Content-Length", strconv.FormatInt(size, 10))
+	if _, err := io.Copy(c.Writer, reader); err != nil {
+		_ = c.Error(err)
+	}
 }
 
 func (h *FileHandler) Mkdir(c *gin.Context) {
@@ -208,8 +216,4 @@ func (h *FileHandler) MyPermissions(c *gin.Context) {
 		}
 	}
 	Success(c, perm)
-}
-
-func formatSize(size int64) string {
-	return strconv.FormatInt(size, 10)
 }

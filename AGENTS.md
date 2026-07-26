@@ -75,4 +75,6 @@ src/pages/             — LoginPage, KeysPage, FileBrowserPage
 
 ## Notes
 
-(Add project-specific notes here as they emerge.)
+- Health check: `GET /api/health` returns `{"status":"ok"}`.
+- Upload limited to 100 MB by default (`MAX_UPLOAD_SIZE` env var, in MB).
+- JWT_SECRET logs a warning if using the default value in production.
