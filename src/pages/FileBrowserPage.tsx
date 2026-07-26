@@ -4,6 +4,7 @@ import apiClient from "../api/client";
 import * as filesApi from "../api/files";
 import * as keysApi from "../api/keys";
 import { useAuth } from "../hooks/useAuth";
+import { isTauri } from "../hooks/useEnv";
 import { getServerBaseUrl, copyToClipboard, formatConnectionInfo } from "../api/share";
 import type { FileItem } from "../types";
 
@@ -332,10 +333,27 @@ export default function FileBrowserPage() {
     return <span className="ml-1 text-blue-500">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
 
-  // 上传文件（支持多文件）
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // 上传文件（支持多文件，Tauri 使用原生对话框）
+  const handleUpload = async (e?: React.ChangeEvent<HTMLInputElement>) => {
+    let files: File[] = [];
+
+    if (isTauri()) {
+      // Tauri 原生文件选择对话框
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const { readFile } = await import("@tauri-apps/plugin-fs");
+      const selected = await open({ multiple: true });
+      if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      for (const filePath of paths) {
+        const data = await readFile(filePath);
+        const fileName = filePath.split(/[\\/]/).pop() || "file";
+        files.push(new File([data], fileName));
+      }
+    } else {
+      if (!e?.target?.files || e.target.files.length === 0) return;
+      files = Array.from(e.target.files);
+    }
+
     setUploading(true);
     setUploadCount(0);
     let success = 0;
@@ -354,17 +372,27 @@ export default function FileBrowserPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // 下载文件
+  // 下载文件（Tauri 使用原生保存对话框）
   const handleDownload = async (item: FileItem) => {
     if (item.type === "dir") return;
     try {
       const blob = await filesApi.downloadFile(item.path);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = item.name;
-      a.click();
-      URL.revokeObjectURL(url);
+
+      if (isTauri()) {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeFile } = await import("@tauri-apps/plugin-fs");
+        const savePath = await save({ defaultPath: item.name });
+        if (!savePath) return;
+        const buffer = await blob.arrayBuffer();
+        await writeFile(savePath, new Uint8Array(buffer));
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = item.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "下载失败");
     }
@@ -456,7 +484,7 @@ export default function FileBrowserPage() {
             新建文件夹
           </button>
           <button
-            onClick={() => fileInputRef.current?.click()}
+                        onClick={() => { if (isTauri()) { handleUpload(); } else { fileInputRef.current?.click(); } }}
             disabled={uploading}
             className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
