@@ -1,6 +1,7 @@
 import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { isTauri } from "../hooks/useEnv";
+import apiClient from "../api/client";
 
 const navItems = [
   { to: "/admin/keys", label: "密钥管理" },
@@ -23,8 +24,31 @@ export default function Layout() {
           </div>
           <span className="text-base font-semibold text-gray-800">LingoLin</span>
           {!tauri && <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">文件服务</span>}
+          {tauri && apiClient.getBaseUrl() && (
+            <span className="ml-2 flex items-center gap-1 text-xs text-green-600">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+              已连接
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
+          {tauri && apiClient.getBaseUrl() && (
+            <>
+              <span className="hidden text-xs text-gray-400 sm:inline-block">{apiClient.getBaseUrl()}</span>
+              <button
+                onClick={() => {
+                  apiClient.removeApiKey();
+                  apiClient.setBaseUrl("");
+                  localStorage.removeItem("api_key");
+                  localStorage.removeItem("api_base_url");
+                  window.location.href = "/connect";
+                }}
+                className="rounded-lg px-3 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              >
+                切换
+              </button>
+            </>
+          )}
           {user && (
             <>
               <span className="text-sm text-gray-400">{user.username}</span>
@@ -40,12 +64,11 @@ export default function Layout() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* 侧边栏 — Tauri 模式只显示文件浏览 */}
-        <aside className="w-56 flex-shrink-0 border-r border-gray-100 bg-white p-3">
-          <nav className="flex flex-col gap-0.5">
-            {navItems
-              .filter((item) => !tauri || item.to === "/files")
-              .map((item) => (
+        {/* 侧边栏 — Tauri 模式不显示 */}
+        {!tauri && (
+          <aside className="w-56 flex-shrink-0 border-r border-gray-100 bg-white p-3">
+            <nav className="flex flex-col gap-0.5">
+              {navItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -60,8 +83,9 @@ export default function Layout() {
                   {item.label}
                 </NavLink>
               ))}
-          </nav>
-        </aside>
+            </nav>
+          </aside>
+        )}
 
         {/* 主内容 */}
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import Loading from "../components/Loading";
 import apiClient from "../api/client";
 import * as filesApi from "../api/files";
@@ -41,81 +42,6 @@ function ShareFileButton() {
   );
 }
 
-// ========== API Key 配置页 ==========
-
-function ApiKeyConfig({ onConfigured }: { onConfigured: () => void }) {
-  const [baseUrl, setBaseUrl] = useState(apiClient.getBaseUrl());
-  const [apiKey, setApiKey] = useState(apiClient.getApiKey() || "");
-  const [testing, setTesting] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (!baseUrl || !apiKey) {
-      setError("请填写服务端地址和 API Key");
-      return;
-    }
-    setTesting(true);
-    try {
-      // 测试连接：请求根目录文件列表
-      apiClient.setBaseUrl(baseUrl.replace(/\/+$/, ""));
-      apiClient.setApiKey(apiKey);
-      await filesApi.listFiles("/");
-      onConfigured();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "连接失败，请检查地址和密钥");
-      apiClient.setBaseUrl("");
-      apiClient.setApiKey("");
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  return (
-    <div className="mx-auto mt-12 max-w-md">
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-gray-900">连接服务端</h1>
-        <p className="mt-1 text-sm text-gray-500">输入 LingoLin 服务端地址和 API Key 开始使用</p>
-      </div>
-      <form onSubmit={handleSubmit} className="rounded-lg border bg-white p-6 shadow-sm">
-        {error && (
-          <div className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
-        )}
-        <div className="mb-4">
-          <label className="mb-1 block text-sm font-medium text-gray-700">服务端地址</label>
-          <input
-            type="text"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            className="w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="http://192.168.1.100:8080"
-            required
-          />
-        </div>
-        <div className="mb-6">
-          <label className="mb-1 block text-sm font-medium text-gray-700">API Key</label>
-          <input
-            type="text"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            placeholder="lingolin_xxxxxxxxxxxx"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={testing}
-          className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {testing ? "连接中..." : "连接"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
 // ========== 预览弹窗 ==========
 
 interface PreviewDialogProps {
@@ -138,7 +64,6 @@ function PreviewDialog({ item, onClose }: PreviewDialogProps) {
     ].includes(mime);
 
     if (isText) {
-      // 文本类：fetch 内容
       const fetchText = async () => {
         try {
           const blob = await filesApi.downloadFile(item.path);
@@ -163,13 +88,10 @@ function PreviewDialog({ item, onClose }: PreviewDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="mx-4 w-full max-w-3xl rounded-lg bg-white shadow-xl">
-        {/* 标题栏 */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h3 className="truncate text-sm font-medium text-gray-900">{item.name}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
-
-        {/* 内容 */}
         <div className="max-h-[75vh] overflow-auto p-4">
           {loading ? (
             <Loading text="加载中..." />
@@ -193,12 +115,18 @@ function PreviewDialog({ item, onClose }: PreviewDialogProps) {
 // ========== 文件浏览器主页面 ==========
 
 export default function FileBrowserPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isWebUser = !!user;
+  const tauri = isTauri();
 
-  const [configured, setConfigured] = useState(false);
-  const [initError, setInitError] = useState("");
-  const configuringRef = useRef(false);
+  // 未配置时重定向
+  const hasBaseUrl = !!apiClient.getBaseUrl();
+  const hasKey = !!apiClient.getApiKey();
+  const hasAutoKey = isWebUser && !!localStorage.getItem("api_key_auto");
+  const configured = isWebUser ? (hasKey || hasAutoKey) : (hasBaseUrl && hasKey);
+  const [initChecked, setInitChecked] = useState(false);
+
   const [currentPath, setCurrentPath] = useState("/");
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,57 +144,59 @@ export default function FileBrowserPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 自动为 Web 登录用户配置代理 + API Key
-  const autoConfigure = useCallback(async (retried?: boolean) => {
-    // 防止 StrictMode / 竞态下重复创建
-    if (configuringRef.current) return;
-    configuringRef.current = true;
+  // Web 已登录用户：自动创建 API Key（无需手动配置）
+  const [webInitDone, setWebInitDone] = useState(false);
+  useEffect(() => {
+    if (!isWebUser || webInitDone) return;
+    if (configured) { setWebInitDone(true); return; }
 
-    apiClient.setBaseUrl("");
-    const savedKey = localStorage.getItem("api_key_auto");
-    if (savedKey) {
-      apiClient.setApiKey(savedKey);
+    const init = async () => {
+      apiClient.setBaseUrl("");
+      const saved = localStorage.getItem("api_key_auto");
+      if (saved) {
+        apiClient.setApiKey(saved);
+        setWebInitDone(true);
+        return;
+      }
       try {
-        await filesApi.listFiles("/");
-        setConfigured(true);
-        configuringRef.current = false;
-        return;
-      } catch {
-        localStorage.removeItem("api_key_auto");
-        if (!retried) {
-          configuringRef.current = false;
-          autoConfigure(true);
+        const newKey = await keysApi.createKey({
+          name: "Web 管理端自动生成",
+          permissions: { allow_paths: ["/*"], read: true, write: true },
+        });
+        if (newKey.key) {
+          localStorage.setItem("api_key_auto", newKey.key);
+          apiClient.setApiKey(newKey.key);
         }
-        return;
+      } catch {
+        // 创建失败，后续操作会报错
       }
+      setWebInitDone(true);
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWebUser]);
+
+  // 首次加载检查配置
+  useEffect(() => {
+    if (tauri && !configured) {
+      navigate("/connect", { replace: true });
+      return;
     }
-    try {
-      const newKey = await keysApi.createKey({
-        name: "Web 管理端自动生成",
-        permissions: { allow_paths: ["/*"], read: true, write: true },
-      });
-      if (newKey.key) {
-        localStorage.setItem("api_key_auto", newKey.key);
-        apiClient.setApiKey(newKey.key);
-        setConfigured(true);
-      } else {
-        setInitError("自动创建 API Key 失败");
-      }
-    } catch (err) {
-      setInitError(err instanceof Error ? err.message : "自动配置失败");
-    } finally {
-      configuringRef.current = false;
+    if (isWebUser && !configured) {
+      // Web 用户正在初始化，稍后自动配置
+      return;
     }
+    setInitChecked(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 初始化：isWebUser 变化时（包括 auth 恢复后）触发配置
+  // 配置就绪后加载文件列表
   useEffect(() => {
-    if (isWebUser) {
-      autoConfigure();
-    } else {
-      setConfigured(!!apiClient.getBaseUrl() && !!apiClient.getApiKey());
+    if (initChecked && (configured || webInitDone)) {
+      fetchFiles(currentPath);
     }
-  }, [isWebUser, autoConfigure]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initChecked, webInitDone]);
 
   const fetchFiles = async (path: string) => {
     setLoading(true);
@@ -276,7 +206,12 @@ export default function FileBrowserPage() {
       setItems(data.items);
       setCurrentPath(data.path);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "获取文件列表失败");
+      const msg = err instanceof Error ? err.message : "获取文件列表失败";
+      if (msg.includes("40003") || msg.includes("权限")) {
+        setError("当前密钥没有此目录的访问权限");
+      } else {
+        setError(msg);
+      }
       setItems([]);
     } finally {
       setLoading(false);
@@ -305,7 +240,7 @@ export default function FileBrowserPage() {
     })),
   ];
 
-  // 排序：目录在前，文件在后，按字段排序
+  // 排序
   const toggleSort = (field: "name" | "size" | "updated_at") => {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -316,9 +251,7 @@ export default function FileBrowserPage() {
   };
 
   const sortedItems = [...items]
-    .filter((item) =>
-      searchQuery ? item.name.toLowerCase().includes(searchQuery.toLowerCase()) : true
-    )
+    .filter((item) => searchQuery ? item.name.toLowerCase().includes(searchQuery.toLowerCase()) : true)
     .sort((a, b) => {
       if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
       let cmp = 0;
@@ -333,12 +266,11 @@ export default function FileBrowserPage() {
     return <span className="ml-1 text-blue-500">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
 
-  // 上传文件（支持多文件，Tauri 使用原生对话框）
+  // 上传文件
   const handleUpload = async (e?: React.ChangeEvent<HTMLInputElement>) => {
     let files: File[] = [];
 
-    if (isTauri()) {
-      // Tauri 原生文件选择对话框
+    if (tauri) {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const { readFile } = await import("@tauri-apps/plugin-fs");
       const selected = await open({ multiple: true });
@@ -363,7 +295,7 @@ export default function FileBrowserPage() {
         await filesApi.uploadFile(file, targetPath);
         success++;
       } catch {
-        // 单个文件失败继续上传其他
+        // 单个文件失败继续上传
       }
       setUploadCount(success);
     }
@@ -372,13 +304,12 @@ export default function FileBrowserPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // 下载文件（Tauri 使用原生保存对话框）
+  // 下载文件
   const handleDownload = async (item: FileItem) => {
     if (item.type === "dir") return;
     try {
       const blob = await filesApi.downloadFile(item.path);
-
-      if (isTauri()) {
+      if (tauri) {
         const { save } = await import("@tauri-apps/plugin-dialog");
         const { writeFile } = await import("@tauri-apps/plugin-fs");
         const savePath = await save({ defaultPath: item.name });
@@ -431,48 +362,20 @@ export default function FileBrowserPage() {
     }
   };
 
-  // 未配置（仅非登录用户看到配置页；Web 登录用户自动配置）
-  if (!configured) {
-    if (isWebUser) {
-      return (
-        <div className="p-4">
-          {initError ? (
-            <div className="mx-auto mt-12 max-w-md text-center">
-              <div className="mb-4 rounded bg-red-50 px-4 py-3 text-sm text-red-600">{initError}</div>
-              <p className="text-sm text-gray-500">请先在密钥管理页创建 API Key，再返回此页</p>
-            </div>
-          ) : (
-            <Loading text="正在连接服务端..." />
-          )}
-        </div>
-      );
-    }
-    // 非 Web 用户：手动配置
-    return (
-      <div className="p-4">
-        <ApiKeyConfig onConfigured={() => setConfigured(true)} />
-      </div>
-    );
-  }
-
+  // 渲染
   return (
     <div>
       {/* 工具栏 */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-gray-900">文件浏览</h1>
-          <ShareFileButton />
-          {!isWebUser && (
+          {isWebUser && <ShareFileButton />}
+          {tauri && (
             <button
-              onClick={() => {
-                apiClient.removeApiKey();
-                localStorage.removeItem("api_base_url");
-                localStorage.removeItem("api_key");
-                setConfigured(false);
-              }}
+              onClick={() => navigate("/connect")}
               className="rounded px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
             >
-              断开
+              切换连接
             </button>
           )}
         </div>
@@ -484,29 +387,20 @@ export default function FileBrowserPage() {
             新建文件夹
           </button>
           <button
-                        onClick={() => { if (isTauri()) { handleUpload(); } else { fileInputRef.current?.click(); } }}
+            onClick={() => { if (tauri) { handleUpload(); } else { fileInputRef.current?.click(); } }}
             disabled={uploading}
             className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {uploading ? `上传中 (${uploadCount})...` : "上传文件"}
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleUpload}
-          />
-          <button
-            onClick={() => fetchFiles(currentPath)}
-            className="rounded border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          >
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleUpload} />
+          <button onClick={() => fetchFiles(currentPath)} className="rounded border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
             刷新
           </button>
         </div>
       </div>
 
-      {/* 面包屑导航 + 搜索 */}
+      {/* 面包屑 + 搜索 */}
       <div className="mb-4 flex items-center justify-between gap-4">
         <nav className="flex items-center gap-1 text-sm">
           {breadcrumbs.map((crumb, i) => (
@@ -515,10 +409,7 @@ export default function FileBrowserPage() {
               {i === breadcrumbs.length - 1 ? (
                 <span className="font-medium text-gray-900">{crumb.label}</span>
               ) : (
-                <button
-                  onClick={() => navigateTo(crumb.path)}
-                  className="text-blue-600 hover:text-blue-800"
-                >
+                <button onClick={() => navigateTo(crumb.path)} className="text-blue-600 hover:text-blue-800">
                   {crumb.label}
                 </button>
               )}
@@ -588,9 +479,7 @@ export default function FileBrowserPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
                       )}
-                      <span className="font-medium text-gray-900 hover:text-blue-600">
-                        {item.name}
-                      </span>
+                      <span className="font-medium text-gray-900 hover:text-blue-600">{item.name}</span>
                     </button>
                   </td>
                   <td className="px-4 py-3 text-gray-500">
@@ -606,26 +495,11 @@ export default function FileBrowserPage() {
                     <div className="flex gap-2">
                       {item.type === "file" && (
                         <>
-                          <button
-                            onClick={() => setPreviewItem(item)}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            预览
-                          </button>
-                          <button
-                            onClick={() => handleDownload(item)}
-                            className="text-green-600 hover:text-green-800"
-                          >
-                            下载
-                          </button>
+                          <button onClick={() => setPreviewItem(item)} className="text-blue-600 hover:text-blue-800">预览</button>
+                          <button onClick={() => handleDownload(item)} className="text-green-600 hover:text-green-800">下载</button>
                         </>
                       )}
-                      <button
-                        onClick={() => setDeleteTarget(item)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        删除
-                      </button>
+                      <button onClick={() => setDeleteTarget(item)} className="text-red-600 hover:text-red-800">删除</button>
                     </div>
                   </td>
                 </tr>
@@ -643,29 +517,14 @@ export default function FileBrowserPage() {
             <form onSubmit={handleCreateFolder}>
               <div className="mb-4">
                 <label className="mb-1 block text-sm font-medium text-gray-700">文件夹名称</label>
-                <input
-                  type="text"
-                  value={folderName}
-                  onChange={(e) => setFolderName(e.target.value)}
-                  className="w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  placeholder="new-folder"
-                  required
-                  autoFocus
-                />
+                <input type="text" value={folderName} onChange={(e) => setFolderName(e.target.value)}
+                  className="w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" placeholder="new-folder" required autoFocus />
               </div>
               <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setShowNewFolder(false); setFolderName(""); }}
-                  className="rounded border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={creatingFolder}
-                  className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
+                <button type="button" onClick={() => { setShowNewFolder(false); setFolderName(""); }}
+                  className="rounded border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">取消</button>
+                <button type="submit" disabled={creatingFolder}
+                  className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
                   {creatingFolder ? "创建中..." : "创建"}
                 </button>
               </div>
@@ -675,9 +534,7 @@ export default function FileBrowserPage() {
       )}
 
       {/* 预览弹窗 */}
-      {previewItem && (
-        <PreviewDialog item={previewItem} onClose={() => setPreviewItem(null)} />
-      )}
+      {previewItem && <PreviewDialog item={previewItem} onClose={() => setPreviewItem(null)} />}
 
       {/* 删除确认 */}
       {deleteTarget && (
@@ -690,17 +547,9 @@ export default function FileBrowserPage() {
               此操作不可撤销。
             </p>
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="rounded border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
+              <button onClick={() => setDeleteTarget(null)} className="rounded border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
                 {deleting ? "删除中..." : "确认删除"}
               </button>
             </div>
