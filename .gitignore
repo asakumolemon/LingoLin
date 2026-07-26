@@ -1,0 +1,30 @@
+# 构建产物
+server/bin/
+desktop/dist/
+web/dist/
+desktop/src-tauri/target/
+
+# 依赖
+desktop/node_modules/
+web/node_modules/
+
+# 运行时数据
+server/data/
+server/store/
+
+# 环境配置
+.env
+
+# 日志
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
+*.local
