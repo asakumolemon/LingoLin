@@ -3,6 +3,9 @@ server/bin/
 desktop/dist/
 web/dist/
 desktop/src-tauri/target/
+LingoLinOC/build/
+LingoLinOC/LingoLinOC.xcodeproj/
+*.xcuserstate
 
 # 依赖
 desktop/node_modules/

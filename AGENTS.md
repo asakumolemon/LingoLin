@@ -2,12 +2,13 @@
 
 ## Project
 
-A file sharing system with **three packages** in a monorepo:
+A file sharing system with **four packages** in a monorepo:
 - **`server/`** — Go 1.26.5 backend (Gin + GORM + SQLite, JWT + API Key auth)
 - **`desktop/`** — Tauri v2 desktop app (Rust shell + React 18 / TypeScript / Vite / Tailwind)
 - **`web/`** — Web admin panel (React 18 / TypeScript / Vite / Tailwind)
+- **`LingoLinOC/`** — native macOS client (Objective-C / AppKit / XcodeGen)
 
-Entry points: `server/cmd/server/main.go` | `desktop/src/main.tsx` | `web/src/main.tsx`
+Entry points: `server/cmd/server/main.go` | `desktop/src/main.tsx` | `web/src/main.tsx` | `LingoLinOC/LingoLinOC/main.m`
 
 ## Commands
 
@@ -20,7 +21,11 @@ Entry points: `server/cmd/server/main.go` | `desktop/src/main.tsx` | `web/src/ma
 | desktop | build frontend | `cd desktop && npm run build` |
 | web | dev | `cd web && npm run dev` |
 | web | build | `cd web && npm run build` |
+| macOS client | build | `cd LingoLinOC && make` |
+| macOS client | run | `cd LingoLinOC && make run` |
 | (any) | npm install | `cd <dir> && npm install` |
+
+The native client requires macOS 11+, Xcode 16.2+, and XcodeGen. `make clean` removes its generated Xcode project and build output.
 
 No test suite exists yet across the whole project.
 
@@ -66,10 +71,25 @@ src/pages/             — LoginPage, KeysPage, FileBrowserPage
 ```
 - Web is the admin panel; desktop is the file client.
 
+### Native macOS client (`LingoLinOC/`)
+```
+LingoLinOC/main.m                  — application entry point
+LingoLinOC/AppDelegate.m           — application lifecycle and window switching
+LingoLinOC/Networking/APIClient.m  — NSURLSession API Key client
+LingoLinOC/Models/                 — response, connection, and file models
+LingoLinOC/ViewControllers/         — connect, file browser, and settings screens
+project.yml                         — XcodeGen project definition
+Makefile                            — generate and build the Xcode project
+```
+- Native AppKit implementation parallel to the Tauri desktop client.
+- Uses only the API Key file endpoints; it does not provide Web admin functions.
+- `LingoLinOC.xcodeproj/` is generated from `project.yml` and is intentionally ignored.
+
 ## Conventions
 
 - **Go**: Standard Go Project Layout. `gofmt`. Error codes as constants in `handler/response.go`. GORM `BeforeSave` hook for bcrypt password hashing. `sha256` for API key storage. Uniform API response: `{code: 0, message: "success", data: …}`.
 - **TS/React**: Functional components, Tailwind CSS utility classes, `react-router-dom` v6 for routing. Auth state in `localStorage`. API callers wrap responses in `ApiResponse<T>` and throw on non-zero code.
+- **Objective-C**: Programmatic AppKit views, system frameworks only, XcodeGen project source in `project.yml`.
 - **API style**: Endpoint paths kebab-case (`/api/files/list`). Query params camelCase. Request/response bodies camelCase.
 - **No tests exist yet** (no `*_test.go` or `*.test.ts` files).
 

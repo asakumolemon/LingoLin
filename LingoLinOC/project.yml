@@ -1,0 +1,31 @@
+name: LingoLinOC
+options:
+  bundleIdPrefix: com.lingolin
+  deploymentTarget:
+    macOS: "11.0"
+  xcodeVersion: "16.2"
+  generateEmptyDirectories: true
+
+targets:
+  LingoLinOC:
+    type: application
+    platform: macOS
+    sources:
+      - path: LingoLinOC
+        excludes:
+          - "Resources/Assets.xcassets"
+    resources:
+      - path: LingoLinOC/Resources/Assets.xcassets
+    settings:
+      base:
+        INFOPLIST_FILE: LingoLinOC/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.lingolin.mac
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "NO"
+        ENABLE_HARDENED_RUNTIME: "NO"
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/LingoLinOC"
+        GCC_WARN_OBJC_UNSAFE_ASSIGN: "NO"
+    preBuildScripts: []

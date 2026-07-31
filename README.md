@@ -7,7 +7,8 @@
 ```
 ├── server/     Go 后端服务 (Gin + GORM + SQLite)
 ├── desktop/    Tauri 桌面客户端 (React + TypeScript + Tailwind)
-└── web/        Web 管理面板 (React + TypeScript + Tailwind)
+├── web/        Web 管理面板 (React + TypeScript + Tailwind)
+└── LingoLinOC/ 原生 macOS 客户端 (Objective-C + AppKit)
 ```
 
 ## 快速开始
@@ -43,6 +44,19 @@ npm run tauri dev        # 完整 Tauri 应用开发
 
 桌面客户端通过 API Key 连接服务端进行文件操作。
 
+### 4. 构建原生 macOS 客户端
+
+需要 macOS 11+、Xcode 16.2+ 和 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。
+
+```bash
+cd LingoLinOC
+make                     # 生成 Xcode 工程并构建 Release
+make run                 # 构建后打开应用
+make clean               # 清理构建产物和生成的 Xcode 工程
+```
+
+原生客户端通过 API Key 连接服务端进行文件操作，与 Tauri 客户端提供相同的文件管理能力。
+
 ## 认证方式
 
 | 方式 | 用途 | 详情 |
@@ -64,6 +78,7 @@ npm run tauri dev        # 完整 Tauri 应用开发
 | 后端 | Go 1.26, Gin, GORM, SQLite (纯 Go 驱动) |
 | 桌面 | Tauri v2, Rust, React 18, Vite, Tailwind |
 | Web | React 18, Vite, Tailwind |
+| Native macOS | Objective-C, AppKit, XcodeGen |
 
 ## 环境变量
 
