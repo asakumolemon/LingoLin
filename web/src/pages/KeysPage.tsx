@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import Loading from "../components/Loading";
 import PathSelector from "../components/PathSelector";
 import * as keysApi from "../api/keys";
-import { getServerBaseUrl, copyToClipboard, formatConnectionInfo } from "../api/share";
+import { getServerBaseUrl, resolveConnectionBaseUrl, copyToClipboard, formatConnectionInfo } from "../api/share";
 import type { ApiKey, KeyPermission } from "../types";
 
 // ========== 创建弹窗 ==========
@@ -15,6 +15,16 @@ function CreateDialog({ open, onClose, onCreated }: { open: boolean; onClose: ()
   const [error, setError] = useState("");
   const [newKey, setNewKey] = useState<ApiKey | null>(null);
   const [copied, setCopied] = useState(false);
+  // 连接地址先同步取当前页面地址，创建成功后异步解析为真实对外地址（域名/IP）
+  const [connBaseUrl, setConnBaseUrl] = useState<string>(getServerBaseUrl);
+  useEffect(() => {
+    if (newKey) {
+      let cancelled = false;
+      resolveConnectionBaseUrl().then((u) => { if (!cancelled) setConnBaseUrl(u); });
+      return () => { cancelled = true; };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newKey]);
 
   if (!open) return null;
 
@@ -35,8 +45,7 @@ function CreateDialog({ open, onClose, onCreated }: { open: boolean; onClose: ()
   const handleClose = () => { setName(""); setAllowPaths(["/"]); setRead(true); setWrite(true); setError(""); setNewKey(null); onClose(); };
 
   if (newKey) {
-    const baseUrl = getServerBaseUrl();
-    const connText = formatConnectionInfo(baseUrl, newKey.key || "");
+    const connText = formatConnectionInfo(connBaseUrl, newKey.key || "");
     const handleCopy = async () => {
       const ok = await copyToClipboard(connText);
       if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
@@ -149,9 +158,9 @@ function ShareButton({ keyName }: { keyName: string }) {
   const [copied, setCopied] = useState(false);
   const autoKey = localStorage.getItem("api_key_auto");
   if (keyName !== "Web 管理端自动生成" || !autoKey) return null;
-  const connText = formatConnectionInfo(getServerBaseUrl(), autoKey);
   const handleClick = async () => {
-    const ok = await copyToClipboard(connText);
+    const baseUrl = await resolveConnectionBaseUrl();
+    const ok = await copyToClipboard(formatConnectionInfo(baseUrl, autoKey));
     if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
   };
   return <button onClick={handleClick} className={`text-sm transition-colors ${copied ? "text-green-600" : "text-indigo-600 hover:text-indigo-800"}`}>{copied ? "已复制 ✓" : "分享"}</button>;

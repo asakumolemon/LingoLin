@@ -53,6 +53,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authSvc)
 	apiKeyHandler := handler.NewApiKeyHandler(apiKeySvc)
 	fileHandler := handler.NewFileHandler(fileSvc)
+	configHandler := handler.NewConfigHandler(cfg)
 
 	// 初始化路由
 	r := gin.Default()
@@ -70,6 +71,7 @@ func main() {
 	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+	r.GET("/api/config", configHandler.Config)
 	r.POST("/api/auth/register", authHandler.Register)
 	r.POST("/api/auth/login", authHandler.Login)
 

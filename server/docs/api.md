@@ -150,6 +150,33 @@ POST /api/auth/login
 
 ---
 
+#### 1.3 获取服务端连接信息
+
+```
+GET /api/config
+```
+
+**响应示例**:
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "public_url": "http://files.example.com",
+    "lan_ip": "192.168.1.100",
+    "port": "8080"
+  }
+}
+```
+
+**说明**: 供 Web 管理面板生成"分享给其他客户端"的连接地址。
+- `public_url`: 管理员通过环境变量 `PUBLIC_URL` 显式配置的对外地址（可为空）；
+- `lan_ip`: 服务端探测到的局域网 IPv4（裸机部署时的默认值，可为空；Docker 内探测到的是容器 IP，请配置 `PUBLIC_URL`）；
+- `port`: 服务监听端口。
+
+---
+
 ### 二、密钥管理（需要 JWT 认证）
 
 所有接口需要在请求头携带: `Authorization: Bearer <jwt_token>`
