@@ -7,6 +7,15 @@ LingoLinOC/build/
 LingoLinOC/LingoLinOC.xcodeproj/
 *.xcuserstate
 
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/.kotlin/
+android/captures/
+
 # 依赖
 desktop/node_modules/
 web/node_modules/
