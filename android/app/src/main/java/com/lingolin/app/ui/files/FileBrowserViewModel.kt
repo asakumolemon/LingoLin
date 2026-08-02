@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.io.OutputStream
 import java.time.Instant
 
@@ -45,7 +46,8 @@ data class FileBrowserUiState(
     val deleteTarget: FileItem? = null,
     val showNewFolder: Boolean = false,
     val downloadProgress: DownloadProgress? = null,
-    val snackbarMessage: String? = null
+    val snackbarMessage: String? = null,
+    val pendingDuplicateNames: List<String> = emptyList()
 )
 
 class FileBrowserViewModel(private val repository: FileRepository) : ViewModel() {
@@ -54,6 +56,13 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
     val state: StateFlow<FileBrowserUiState> = _state.asStateFlow()
 
     private var nextUploadId = 0
+    private var pendingUpload: PendingUpload? = null
+
+    private data class PendingUpload(
+        val uris: List<Uri>,
+        val resolver: ContentResolver,
+        val targetDir: String
+    )
 
     init {
         loadPermission()
@@ -133,7 +142,7 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
         }
     }
 
-    /** 串行逐文件上传，进度实时更新；完成自动刷新列表 */
+    /** 检查同名后串行逐文件上传，进度实时更新；完成自动刷新列表 */
     fun upload(uris: List<Uri>, resolver: ContentResolver) {
         if (uris.isEmpty()) return
         if (!(_state.value.permission?.write ?: true)) {
@@ -141,6 +150,40 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
             return
         }
         val targetDir = _state.value.currentPath
+        val names = uris.map { queryName(resolver, it) }
+        val existingNames = _state.value.items
+            .filter { !it.isDir }
+            .map { it.name.lowercase() }
+            .toSet()
+        val duplicateNames = names
+            .filter { it.lowercase() in existingNames }
+            .distinct()
+        if (duplicateNames.isNotEmpty()) {
+            pendingUpload = PendingUpload(uris, resolver, targetDir)
+            _state.update { it.copy(pendingDuplicateNames = duplicateNames) }
+            return
+        }
+        startUpload(uris, resolver, targetDir, overwrite = false)
+    }
+
+    fun confirmDuplicateUpload() {
+        val pending = pendingUpload ?: return
+        pendingUpload = null
+        _state.update { it.copy(pendingDuplicateNames = emptyList()) }
+        startUpload(pending.uris, pending.resolver, pending.targetDir, overwrite = true)
+    }
+
+    fun cancelDuplicateUpload() {
+        pendingUpload = null
+        _state.update { it.copy(pendingDuplicateNames = emptyList()) }
+    }
+
+    private fun startUpload(
+        uris: List<Uri>,
+        resolver: ContentResolver,
+        targetDir: String,
+        overwrite: Boolean
+    ) {
         viewModelScope.launch {
             for (uri in uris) {
                 val name = queryName(resolver, uri)
@@ -155,13 +198,17 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
                     val stream = resolver.openInputStream(uri)
                         ?: throw IllegalStateException("无法打开文件")
                     stream.use { input ->
-                        repository.upload(name, input, size, Paths.join(targetDir, name)) { sent, total ->
+                        repository.upload(name, input, size, Paths.join(targetDir, name), overwrite) { sent, total ->
                             updateUpload(id) {
                                 it.copy(sent = sent, total = if (total >= 0) total else it.total)
                             }
                         }
                     }
                     updateUpload(id) { it.copy(done = true) }
+                    viewModelScope.launch {
+                        delay(UPLOAD_COMPLETION_DISPLAY_MS)
+                        removeUpload(id)
+                    }
                 } catch (e: Exception) {
                     updateUpload(id) { it.copy(done = true, error = e.message ?: "上传失败") }
                 }
@@ -203,6 +250,9 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
             s.copy(uploads = s.uploads.map { if (it.id == id) transform(it) else it })
         }
 
+    private fun removeUpload(id: Int) =
+        _state.update { s -> s.copy(uploads = s.uploads.filterNot { it.id == id }) }
+
     private fun showMessage(msg: String) = _state.update { it.copy(snackbarMessage = msg) }
 
     private fun queryName(resolver: ContentResolver, uri: Uri): String {
@@ -227,6 +277,7 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
 
     companion object {
         const val MAX_UPLOAD_SIZE = 100L * 1024 * 1024
+        const val UPLOAD_COMPLETION_DISPLAY_MS = 5_000L
     }
 }
 

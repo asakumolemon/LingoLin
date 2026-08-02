@@ -44,8 +44,9 @@ class FileRepository(
         stream: InputStream,
         size: Long,
         targetPath: String,
+        overwrite: Boolean,
         onProgress: (sent: Long, total: Long) -> Unit
-    ): FileItem = api.upload(name, stream, size, targetPath, onProgress)
+    ): FileItem = api.upload(name, stream, size, targetPath, overwrite, onProgress)
 
     suspend fun download(
         path: String,

@@ -281,6 +281,7 @@ export default function KeysPage() {
                       className="rounded"
                     />
                   </td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{key.name}</td>
                   <td className="px-4 py-3 text-gray-600"><code className="text-xs">{key.permissions.allow_paths.join(", ")}</code></td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 text-xs">

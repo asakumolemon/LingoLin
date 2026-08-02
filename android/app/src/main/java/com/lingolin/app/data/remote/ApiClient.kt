@@ -99,12 +99,14 @@ class ApiClient(private val config: ConfigStore) {
         inputStream: InputStream,
         size: Long,
         targetPath: String,
+        overwrite: Boolean,
         onProgress: (sent: Long, total: Long) -> Unit
     ): FileItem = withContext(Dispatchers.IO) {
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("file", displayName, ProgressRequestBody(inputStream, size, onProgress))
             .addFormDataPart("path", targetPath)
+            .addFormDataPart("overwrite", overwrite.toString())
             .build()
         val request = Request.Builder()
             .url(buildUrl("/api/files/upload"))

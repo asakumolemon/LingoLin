@@ -15,6 +15,8 @@ import (
 	"LingoLin-go/internal/repository"
 )
 
+var ErrFileAlreadyExists = errors.New("文件已存在")
+
 type FileService struct {
 	storePath     string
 	recordRepo    *repository.FileRecordRepo
@@ -183,7 +185,7 @@ func (s *FileService) List(apiPath string, perm *model.KeyPermission, apiKeyID u
 }
 
 // Upload 保存上传文件
-func (s *FileService) Upload(apiPath string, reader io.Reader, apiKeyID uint) (*FileItem, error) {
+func (s *FileService) Upload(apiPath string, reader io.Reader, apiKeyID uint, overwrite bool) (*FileItem, error) {
 	cleanPath, err := s.sanitizePath(apiPath)
 	if err != nil {
 		return nil, err
@@ -195,6 +197,18 @@ func (s *FileService) Upload(apiPath string, reader io.Reader, apiKeyID uint) (*
 	// 确保父目录存在
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
 		return nil, errors.New("无法创建目录")
+	}
+
+	// 防止文件路径覆盖目录
+	if info, statErr := os.Stat(realPath); statErr == nil {
+		if info.IsDir() {
+			return nil, errors.New("目标路径是目录")
+		}
+		if !overwrite {
+			return nil, ErrFileAlreadyExists
+		}
+	} else if !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("无法检查目标文件: %w", statErr)
 	}
 
 	// 写入文件

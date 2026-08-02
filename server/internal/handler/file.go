@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -64,6 +65,8 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	defer file.Close()
 
 	apiPath := c.PostForm("path")
+	overwriteValue, overwriteProvided := c.GetPostForm("overwrite")
+	overwrite := !overwriteProvided || overwriteValue == "true"
 	if apiPath == "" {
 		// 如果没有指定路径，使用文件名
 		apiPath = "/" + header.Filename
@@ -86,9 +89,13 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	apiKeyID, _ := c.Get("api_key_id")
 	keyID, _ := apiKeyID.(uint)
 
-	item, err := h.svc.Upload(apiPath, file, keyID)
+	item, err := h.svc.Upload(apiPath, file, keyID, overwrite)
 	if err != nil {
-		Error(c, http.StatusBadRequest, CodeFileError, err.Error())
+		if errors.Is(err, service.ErrFileAlreadyExists) {
+			Error(c, http.StatusConflict, CodeAlreadyExists, err.Error())
+		} else {
+			Error(c, http.StatusBadRequest, CodeFileError, err.Error())
+		}
 		return
 	}
 

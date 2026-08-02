@@ -395,6 +395,7 @@ POST /api/files/upload
 |------|------|------|------|
 | file | file | 是 | 要上传的文件 |
 | path | string | 是 | 目标路径，例如 `/docs/report.pdf` |
+| overwrite | string | 否 | 是否允许覆盖已存在文件；传 `true` 时覆盖，传 `false` 时遇到同名文件返回 `40005`；未传时保持兼容行为，允许覆盖 |
 
 **响应示例**:
 
@@ -411,7 +412,7 @@ POST /api/files/upload
 }
 ```
 
-> 如果目标路径的父目录不存在，会自动创建。
+> 如果目标路径的父目录不存在，会自动创建。已存在的文件只有在 `overwrite=true` 时才会覆盖。
 
 ---
 

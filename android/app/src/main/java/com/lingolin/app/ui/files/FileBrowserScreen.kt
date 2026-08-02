@@ -264,6 +264,27 @@ fun FileBrowserScreen() {
         }
     }
 
+    // 同名文件覆盖确认
+    if (state.pendingDuplicateNames.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = vm::cancelDuplicateUpload,
+            title = { Text("文件已存在") },
+            text = {
+                Text("以下文件已存在，继续将覆盖原文件：\n${state.pendingDuplicateNames.joinToString("\n")}")
+            },
+            confirmButton = {
+                TextButton(onClick = vm::confirmDuplicateUpload) {
+                    Text("覆盖")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::cancelDuplicateUpload) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
     // 新建文件夹
     if (state.showNewFolder) {
         NewFolderDialog(
