@@ -16,15 +16,17 @@ import (
 )
 
 var ErrFileAlreadyExists = errors.New("文件已存在")
+var ErrTextEditUnsupported = errors.New("不支持编辑该文件类型")
 
 type FileService struct {
-	storePath     string
-	recordRepo    *repository.FileRecordRepo
-	MaxUploadSize int64
+	storePath       string
+	recordRepo      *repository.FileRecordRepo
+	MaxUploadSize   int64
+	MaxTextEditSize int64
 }
 
-func NewFileService(storePath string, recordRepo *repository.FileRecordRepo, maxUploadSize int64) *FileService {
-	return &FileService{storePath: storePath, recordRepo: recordRepo, MaxUploadSize: maxUploadSize}
+func NewFileService(storePath string, recordRepo *repository.FileRecordRepo, maxUploadSize, maxTextEditSize int64) *FileService {
+	return &FileService{storePath: storePath, recordRepo: recordRepo, MaxUploadSize: maxUploadSize, MaxTextEditSize: maxTextEditSize}
 }
 
 type FileItem struct {
@@ -243,6 +245,63 @@ func (s *FileService) Upload(apiPath string, reader io.Reader, apiKeyID uint, ov
 	}, nil
 }
 
+func (s *FileService) SaveContent(apiPath string, content []byte, apiKeyID uint) (*FileItem, error) {
+	cleanPath, err := s.sanitizePath(apiPath)
+	if err != nil {
+		return nil, err
+	}
+	if !s.isEditableTextMime(s.detectMimeType(cleanPath)) {
+		return nil, ErrTextEditUnsupported
+	}
+
+	realPath := s.toRealPath(cleanPath)
+	info, err := os.Stat(realPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, errors.New("文件不存在")
+		}
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, errors.New("目标路径是目录")
+	}
+
+	parentDir := filepath.Dir(realPath)
+	tmp, err := os.CreateTemp(parentDir, ".lingolin-edit-*")
+	if err != nil {
+		return nil, fmt.Errorf("无法创建临时文件: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		tmp.Close()
+		return nil, fmt.Errorf("无法设置文件权限: %w", err)
+	}
+	if _, err := tmp.Write(content); err != nil {
+		tmp.Close()
+		return nil, fmt.Errorf("写入文件失败: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return nil, fmt.Errorf("同步文件失败: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, fmt.Errorf("关闭文件失败: %w", err)
+	}
+	if err := os.Rename(tmpName, realPath); err != nil {
+		return nil, fmt.Errorf("替换文件失败: %w", err)
+	}
+
+	if s.recordRepo != nil && apiKeyID > 0 {
+		_ = s.recordRepo.Create(&model.FileRecord{Path: cleanPath, ApiKeyID: apiKeyID})
+	}
+	return &FileItem{
+		Name: filepath.Base(cleanPath), Path: cleanPath, Type: "file", Size: int64(len(content)),
+		MimeType: s.detectMimeType(cleanPath), UpdatedAt: time.Now(),
+	}, nil
+}
+
 // Download 返回文件读取流
 func (s *FileService) Download(apiPath string) (io.ReadCloser, string, int64, error) {
 	cleanPath, err := s.sanitizePath(apiPath)
@@ -425,6 +484,18 @@ func (s *FileService) detectMimeType(filename string) string {
 			return "application/octet-stream"
 		}
 		return mimeType
+	}
+}
+
+func (s *FileService) isEditableTextMime(mimeType string) bool {
+	if strings.HasPrefix(mimeType, "text/") {
+		return true
+	}
+	switch mimeType {
+	case "application/json", "application/xml", "application/javascript", "application/yaml", "application/x-yaml":
+		return true
+	default:
+		return false
 	}
 }
 

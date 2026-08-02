@@ -13,10 +13,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import com.lingolin.app.AppGraph
 import com.lingolin.app.ui.files.FileBrowserScreen
 import com.lingolin.app.ui.settings.SettingsScreen
 
@@ -48,7 +50,7 @@ fun MainScreen(onDisconnected: () -> Unit) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (selectedTab) {
-                0 -> FileBrowserScreen()
+                0 -> key(AppGraph.repository.activeConnection?.id) { FileBrowserScreen(connectionKey = AppGraph.repository.activeConnection?.let { "${it.id}:${it.baseUrl}:${it.apiKey.hashCode()}" }) }
                 else -> SettingsScreen(onDisconnected = onDisconnected)
             }
         }

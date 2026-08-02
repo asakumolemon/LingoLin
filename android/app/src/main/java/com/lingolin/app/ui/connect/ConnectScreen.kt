@@ -9,9 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,112 +26,76 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lingolin.app.AppGraph
+import com.lingolin.app.data.model.ConnectionConfig
 import com.lingolin.app.ui.theme.Blue100
 import com.lingolin.app.ui.theme.Blue600
 
-/**
- * 连接页：服务器地址 + API Key，连接测试成功后进入文件页。
- */
 @Composable
 fun ConnectScreen(onConnected: () -> Unit) {
     val vm: ConnectViewModel = viewModel { ConnectViewModel(AppGraph.repository) }
     val state by vm.state.collectAsState()
-
-    LaunchedEffect(Unit) {
-        vm.events.collect { if (it is ConnectEvent.Connected) onConnected() }
-    }
+    LaunchedEffect(Unit) { vm.events.collect { onConnected() } }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Blue100, MaterialTheme.colorScheme.background))),
+        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Blue100, MaterialTheme.colorScheme.background))),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            tonalElevation = 4.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp)
-        ) {
+        Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth().padding(24.dp)) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "LingoLin",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Blue600
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "文件共享客户端",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(Modifier.height(24.dp))
+                Text("LingoLin", style = MaterialTheme.typography.headlineLarge, color = Blue600)
+                Text("文件共享客户端", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.height(20.dp))
 
-                OutlinedTextField(
-                    value = state.baseUrl,
-                    onValueChange = vm::onUrlChange,
-                    label = { Text("服务器地址") },
-                    placeholder = { Text("http://192.168.1.100:8080") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = state.apiKey,
-                    onValueChange = vm::onKeyChange,
-                    label = { Text("API Key") },
-                    placeholder = { Text("lingolin_xxxxxxxx") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (state.error != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = state.error.orEmpty(),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = vm::connect,
-                    enabled = !state.testing,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                ) {
-                    if (state.testing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Text("连接服务端")
-                    }
-                }
-
-                if (state.isConfigured) {
+                if (state.profiles.isNotEmpty()) {
+                    Text("已保存的连接", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = vm::enterExisting) {
-                        Text("已有配置，直接进入文件浏览 →")
+                    state.profiles.forEach { profile ->
+                        ProfileCard(profile, selected = profile.id == state.editingId, onClick = { vm.select(profile) })
+                        Spacer(Modifier.height(6.dp))
                     }
+                    TextButton(onClick = vm::newConnection, modifier = Modifier.fillMaxWidth()) { Text("新增连接") }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                OutlinedTextField(state.name, vm::onNameChange, label = { Text("配置名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(state.baseUrl, vm::onUrlChange, label = { Text("服务器地址") }, placeholder = { Text("http://192.168.1.100:8080") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(state.apiKey, vm::onKeyChange, label = { Text("API Key") }, placeholder = { Text("lingolin_xxxxxxxx") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+
+                state.error?.let { error ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                }
+                Spacer(Modifier.height(18.dp))
+                Button(onClick = vm::connect, enabled = !state.testing, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                    if (state.testing) CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    else Text(if (state.editingId == null) "保存并连接" else "连接")
+                }
+                if (state.isConfigured) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = vm::enterExisting) { Text("使用当前配置进入文件浏览 →") }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileCard(profile: ConnectionConfig, selected: Boolean, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(profile.name + if (selected) "（当前）" else "", style = MaterialTheme.typography.titleSmall)
+            Text(profile.baseUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            Text("密钥：${profile.maskedApiKey}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         }
     }
 }

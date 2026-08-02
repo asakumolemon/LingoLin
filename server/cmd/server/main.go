@@ -44,7 +44,7 @@ func main() {
 	// 初始化业务逻辑层
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	apiKeySvc := service.NewApiKeyService(apiKeyRepo)
-	fileSvc := service.NewFileService(cfg.StorePath, fileRecordRepo, cfg.MaxUploadSize)
+	fileSvc := service.NewFileService(cfg.StorePath, fileRecordRepo, cfg.MaxUploadSize, cfg.MaxTextEditSize)
 
 	// 确保默认管理员账号存在
 	authSvc.EnsureDefaultAdmin(cfg.DefaultAdminPassword)
@@ -91,6 +91,7 @@ func main() {
 	{
 		file.GET("/list", fileHandler.List)
 		file.POST("/upload", fileHandler.Upload)
+		file.PUT("/content", fileHandler.Content)
 		file.GET("/download", fileHandler.Download)
 		file.GET("/preview", fileHandler.Preview)
 		file.POST("/mkdir", fileHandler.Mkdir)

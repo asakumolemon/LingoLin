@@ -16,6 +16,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSink
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -133,6 +134,60 @@ class ApiClient(private val config: ConfigStore) {
         }
     }
 
+    /** 严格读取完整文本，供编辑使用，拒绝非 UTF-8 内容。 */
+    suspend fun readEditableText(path: String, maxBytes: Int = MAX_TEXT_EDIT_BYTES): String =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(buildUrl("/api/files/preview?path=$path"))
+                .header("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+            try {
+                okHttp.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        throw ApiException(resp.code, parseMessage(resp.body?.string()) ?: "无法读取文件内容")
+                    }
+                    val input = resp.body?.byteStream() ?: throw ApiException(-1, "无法读取文件内容")
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n == -1) break
+                        total += n
+                        if (total > maxBytes) throw ApiException(413, "文本内容超过 2MB 编辑限制")
+                        output.write(buffer, 0, n)
+                    }
+                    val decoder = Charsets.UTF_8.newDecoder()
+                        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    decoder.decode(java.nio.ByteBuffer.wrap(output.toByteArray())).toString()
+                }
+            } catch (e: ApiException) { throw e }
+            catch (e: java.nio.charset.CharacterCodingException) { throw ApiException(-1, "文件不是有效的 UTF-8 文本") }
+            catch (e: IOException) { throw ApiException(-1, "网络连接失败：${e.message}") }
+        }
+
+    /** 保存 UTF-8 文本内容并返回更新后的文件信息。 */
+    suspend fun saveTextContent(path: String, content: String): FileItem =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(buildUrl("/api/files/content?path=$path"))
+                .header("Authorization", "Bearer $apiKey")
+                .header("Content-Type", "text/plain; charset=utf-8")
+                .put(content.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+                .build()
+            try {
+                okHttp.newCall(request).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) throw ApiException(parseCode(body) ?: resp.code, parseMessage(body) ?: "保存失败")
+                    val response: ApiResponse<FileItem>? = gson.fromJson(body, FILE_ITEM_RESPONSE)
+                    response?.data ?: throw ApiException(-1, "保存响应格式错误")
+                }
+            } catch (e: ApiException) { throw e }
+            catch (e: IOException) { throw ApiException(-1, "网络连接失败：${e.message}") }
+        }
+
     // ---------- 下载 / 预览 ----------
 
     /** 流式下载到 OutputStream，带进度回调 */
@@ -247,6 +302,7 @@ class ApiClient(private val config: ConfigStore) {
 
     private companion object {
         const val MAX_PREVIEW_BYTES = 2 * 1024 * 1024
+        const val MAX_TEXT_EDIT_BYTES = 2 * 1024 * 1024
         val FILE_ITEM_RESPONSE: TypeToken<ApiResponse<FileItem>> =
             object : TypeToken<ApiResponse<FileItem>>() {}
     }

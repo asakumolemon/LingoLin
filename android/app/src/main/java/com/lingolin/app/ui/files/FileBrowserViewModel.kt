@@ -237,6 +237,13 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
     }
 
     suspend fun readPreviewText(item: FileItem): String = repository.readPreviewText(item.path)
+    suspend fun readEditableText(item: FileItem): String = repository.readEditableText(item.path)
+
+    suspend fun saveTextContent(item: FileItem, content: String) {
+        repository.saveTextContent(item.path, content)
+        showMessage("已保存")
+        load(_state.value.currentPath)
+    }
 
     /** 图片预览 URL（供 Coil 使用，token 走查询参数） */
     fun previewUrl(path: String): String = repository.previewUrl(path)

@@ -13,17 +13,19 @@ type Config struct {
 	StorePath            string
 	DefaultAdminPassword string
 	MaxUploadSize        int64  // 上传文件大小上限（字节）
+	MaxTextEditSize      int64  // 文本编辑大小上限（字节）
 	PublicURL            string // 对外可达的服务地址（供 Web 面板生成分享连接，可为空）
 }
 
 func Load() *Config {
 	cfg := &Config{
-		Port:                  getEnv("PORT", "8080"),
-		DBPath:                getEnv("DB_PATH", "data/lingolin.db"),
-		JWTSecret:             getEnvRequired("JWT_SECRET", "change-me-in-production"),
-		StorePath:             getEnv("STORE_PATH", "store"),
+		Port:                 getEnv("PORT", "8080"),
+		DBPath:               getEnv("DB_PATH", "data/lingolin.db"),
+		JWTSecret:            getEnvRequired("JWT_SECRET", "change-me-in-production"),
+		StorePath:            getEnv("STORE_PATH", "store"),
 		DefaultAdminPassword: getEnv("DEFAULT_ADMIN_PASSWORD", "admin123"),
-		MaxUploadSize:        int64(getEnvInt("MAX_UPLOAD_SIZE", 100)) * 1024 * 1024, // 默认 100MB
+		MaxUploadSize:        int64(getEnvInt("MAX_UPLOAD_SIZE", 100)) * 1024 * 1024,  // 默认 100MB
+		MaxTextEditSize:      int64(getEnvInt("MAX_TEXT_EDIT_SIZE", 2)) * 1024 * 1024, // 默认 2MB
 		PublicURL:            getEnv("PUBLIC_URL", ""),
 	}
 	return cfg

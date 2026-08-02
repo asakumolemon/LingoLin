@@ -416,7 +416,21 @@ POST /api/files/upload
 
 ---
 
-#### 3.3 下载文件
+#### 3.3 保存文本内容
+
+```
+PUT /api/files/content?path=/docs/readme.md
+```
+
+**请求体**：`text/plain; charset=utf-8`，仅支持 UTF-8 文本，最大 2MB。
+
+该接口要求 API Key 具有写入权限，目标文件必须已存在且属于可编辑文本类型。服务端使用临时文件原子替换原文件。
+
+**响应**：返回更新后的文件信息。
+
+---
+
+#### 3.4 下载文件
 
 ```
 GET /api/files/download?path=/docs/report.pdf

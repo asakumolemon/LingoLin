@@ -1,6 +1,7 @@
 package com.lingolin.app.data.repository
 
 import com.lingolin.app.data.local.ConfigStore
+import com.lingolin.app.data.model.ConnectionConfig
 import com.lingolin.app.data.model.FileItem
 import com.lingolin.app.data.model.KeyPermission
 import com.lingolin.app.data.model.ListResp
@@ -16,13 +17,31 @@ class FileRepository(
     private val config: ConfigStore
 ) {
     // 配置读写
+    val connections: List<ConnectionConfig> get() = config.connections
+    val activeConnection: ConnectionConfig? get() = config.activeConnection
     val baseUrl: String get() = config.baseUrl ?: ""
     val apiKey: String get() = config.apiKey ?: ""
     val isConfigured: Boolean get() = config.isConfigured
+
+    fun saveConnection(connection: ConnectionConfig, activate: Boolean = true) =
+        config.saveConnection(connection, activate)
+
+    fun activateConnection(id: String): Boolean = config.activateConnection(id)
+    fun deleteConnection(id: String): ConnectionConfig? = config.deleteConnection(id)
+
+    /** 兼容旧调用：保存为当前配置。 */
     fun saveConfig(url: String, key: String) {
-        config.baseUrl = url
-        config.apiKey = key
+        val current = config.activeConnection
+        config.saveConnection(
+            ConnectionConfig(
+                id = current?.id ?: java.util.UUID.randomUUID().toString(),
+                name = current?.name ?: "默认连接",
+                baseUrl = url,
+                apiKey = key
+            )
+        )
     }
+
     fun clearConfig() = config.clear()
 
     // 权限
@@ -55,6 +74,8 @@ class FileRepository(
     ): Unit = api.downloadTo(path, out, onProgress)
 
     suspend fun readPreviewText(path: String): String = api.readPreviewText(path)
+    suspend fun readEditableText(path: String): String = api.readEditableText(path)
+    suspend fun saveTextContent(path: String, content: String): FileItem = api.saveTextContent(path, content)
 
     fun previewUrl(path: String): String = api.previewUrl(path)
 

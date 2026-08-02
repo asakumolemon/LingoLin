@@ -62,8 +62,8 @@ import com.lingolin.app.util.Format
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FileBrowserScreen() {
-    val vm: FileBrowserViewModel = viewModel { FileBrowserViewModel(AppGraph.repository) }
+fun FileBrowserScreen(connectionKey: String? = null) {
+    val vm: FileBrowserViewModel = viewModel(key = connectionKey ?: "default") { FileBrowserViewModel(AppGraph.repository) }
     val state by vm.state.collectAsState()
     val context = LocalContext.current
 
@@ -310,7 +310,7 @@ fun FileBrowserScreen() {
 
     // 预览
     state.previewItem?.let { item ->
-        PreviewDialog(item = item, vm = vm, onDismiss = { vm.setPreview(null) })
+        PreviewDialog(item = item, vm = vm, canWrite = canWrite, onDismiss = { vm.setPreview(null) })
     }
 }
 

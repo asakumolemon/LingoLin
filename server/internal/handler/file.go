@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"unicode/utf8"
 
 	"LingoLin-go/internal/model"
 	"LingoLin-go/internal/service"
@@ -99,6 +100,41 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	Success(c, item)
+}
+
+func (h *FileHandler) Content(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		Error(c, http.StatusBadRequest, CodeBadRequest, "请指定文件路径")
+		return
+	}
+	perm := getPermission(c)
+	if perm != nil {
+		if err := h.svc.CheckAccess(path, perm, true); err != nil {
+			Error(c, http.StatusForbidden, CodeForbidden, err.Error())
+			return
+		}
+	}
+
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.svc.MaxTextEditSize)
+	content, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		Error(c, http.StatusRequestEntityTooLarge, CodeFileError, "文本内容超过 2MB 限制")
+		return
+	}
+	if !utf8.Valid(content) {
+		Error(c, http.StatusBadRequest, CodeBadRequest, "内容不是有效的 UTF-8 文本")
+		return
+	}
+
+	apiKeyID, _ := c.Get("api_key_id")
+	keyID, _ := apiKeyID.(uint)
+	item, err := h.svc.SaveContent(path, content, keyID)
+	if err != nil {
+		Error(c, http.StatusBadRequest, CodeFileError, err.Error())
+		return
+	}
 	Success(c, item)
 }
 
