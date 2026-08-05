@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import java.io.OutputStream
 import java.time.Instant
 
 enum class SortField { NAME, SIZE, UPDATED_AT }
@@ -217,14 +216,22 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
         }
     }
 
-    /** 流式下载到指定 OutputStream（SAF 已创建目标文档），完成提示 */
-    fun download(item: FileItem, out: OutputStream) {
+    /**
+     * 流式下载到 SAF 目标文档（Uri）。
+     * 流在协程内打开并关闭，与上传 startUpload 的写法对齐；
+     * 避免此前在 UI 层 use 关闭 OutputStream 后协程仍在写入导致的 "stream closed"。
+     */
+    fun download(item: FileItem, uri: Uri, resolver: ContentResolver) {
         viewModelScope.launch {
             _state.update { it.copy(downloadProgress = DownloadProgress(item.name, 0, 0)) }
             try {
-                repository.download(item.path, out) { sent, total ->
-                    _state.update { s ->
-                        s.copy(downloadProgress = DownloadProgress(item.name, sent, total))
+                val out = resolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("无法创建文件")
+                out.use { stream ->
+                    repository.download(item.path, stream) { sent, total ->
+                        _state.update { s ->
+                            s.copy(downloadProgress = DownloadProgress(item.name, sent, total))
+                        }
                     }
                 }
                 showMessage("已保存")

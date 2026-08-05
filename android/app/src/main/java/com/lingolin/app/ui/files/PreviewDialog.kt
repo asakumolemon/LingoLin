@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,7 +20,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +42,7 @@ import coil.request.ImageRequest
 import com.lingolin.app.data.model.FileItem
 import com.lingolin.app.ui.components.ConfirmDialog
 
-private const val MAX_EDIT_BYTES = 2 * 1024 * 1024
+private const val MAX_EDIT_BYTES = 512 * 1024
 
 @Composable
 fun PreviewDialog(
@@ -55,7 +55,7 @@ fun PreviewDialog(
     var error by remember(item.path) { mutableStateOf<String?>(null) }
     var editing by remember(item.path) { mutableStateOf(false) }
     var editorText by remember(item.path) { mutableStateOf("") }
-    var savedText by remember(item.path) { mutableStateOf("") }
+    var initialTextHash by remember(item.path) { mutableStateOf(0) }
     var loadingEdit by remember(item.path) { mutableStateOf(false) }
     var saving by remember(item.path) { mutableStateOf(false) }
     var showDiscard by remember(item.path) { mutableStateOf(false) }
@@ -68,7 +68,7 @@ fun PreviewDialog(
     }
 
     fun requestClose() {
-        if (editing && editorText != savedText) showDiscard = true else onDismiss()
+        if (editing && editorText.hashCode() != initialTextHash) showDiscard = true else onDismiss()
     }
 
     Dialog(onDismissRequest = ::requestClose) {
@@ -83,11 +83,14 @@ fun PreviewDialog(
                                 loadingEdit = true
                                 error = null
                             }
-                        ) { Text(if (item.size <= MAX_EDIT_BYTES) "编辑" else "超过 2MB，不可编辑") }
+                        ) { Text("编辑") }
+                        if (item.size > MAX_EDIT_BYTES) {
+                            Text("仅支持编辑 512KB 以内文件", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
                     if (editing) {
-                        TextButton(enabled = !saving, onClick = { editing = false; editorText = savedText }) { Text("取消") }
-                        Button(enabled = !saving && editorText != savedText, onClick = {
+                        TextButton(enabled = !saving, onClick = { editing = false; editorText = "" }) { Text("取消") }
+                        Button(enabled = !saving && editorText.hashCode() != initialTextHash, onClick = {
                             saving = true
                         }) { Text("保存") }
                     }
@@ -98,17 +101,17 @@ fun PreviewDialog(
                         try {
                             val text = vm.readEditableText(item)
                             editorText = text
-                            savedText = text
+                            initialTextHash = text.hashCode()
                             editing = true
                         } catch (e: Exception) { error = e.message ?: "文件不是有效的 UTF-8 文本" }
                         finally { loadingEdit = false }
                     }
                 }
                 if (saving) {
-                    LaunchedEffect(item.path, saving, editorText) {
+                    LaunchedEffect(item.path, saving) {
                         try {
                             vm.saveTextContent(item, editorText)
-                            savedText = editorText
+                            initialTextHash = editorText.hashCode()
                             content = editorText
                             editing = false
                         } catch (e: Exception) { error = e.message ?: "保存失败" }
@@ -122,11 +125,11 @@ fun PreviewDialog(
                             model = ImageRequest.Builder(LocalContext.current).data(vm.previewUrl(item.path)).crossfade(true).build(),
                             contentDescription = item.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()
                         )
-                        editing -> OutlinedTextField(
+                        editing -> BasicTextField(
                             value = editorText,
                             onValueChange = { editorText = it },
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                            modifier = Modifier.fillMaxSize().padding(12.dp),
+                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                             maxLines = Int.MAX_VALUE
                         )
                         content == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

@@ -80,9 +80,8 @@ fun FileBrowserScreen(connectionKey: String? = null) {
         val item = pendingDownload ?: return@rememberLauncherForActivityResult
         pendingDownload = null
         if (uri != null) {
-            context.contentResolver.openOutputStream(uri)?.use { out ->
-                vm.download(item, out)
-            }
+            // 流由 ViewModel 在协程内打开并关闭（对齐上传写法），避免提前关闭导致 "stream closed"
+            vm.download(item, uri, context.contentResolver)
         }
     }
 
@@ -216,12 +215,22 @@ fun FileBrowserScreen(connectionKey: String? = null) {
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = { Format.percent(dp.sent, dp.total) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                        )
+                        if (dp.total > 0) {
+                            LinearProgressIndicator(
+                                progress = { Format.percent(dp.sent, dp.total) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                            )
+                        } else {
+                            // 总大小未知（如 Content-Length 不可达/响应被压缩）时，
+                            // 显示不确定进度动画，避免进度条死停在 0%
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                            )
+                        }
                     }
                 }
             }
